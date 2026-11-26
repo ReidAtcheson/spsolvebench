@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+node_modules/
+.wrangler/
+.dev.vars
+*.key
+spsolve-key.json
+web/local-data/
+.DS_Store

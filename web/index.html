@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>spsolvebench — Trustless Sparse Solver Leaderboard</title>
+  <meta name="description" content="Public, cryptographically verified sparse linear solver leaderboard using drand Quicknet, Sigstore RFC 3161 timestamps, and succinct Ristretto255 sumcheck proofs.">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="brand-mark">Ax=b</div>
+        <div>
+          <h1 id="site-title">spsolvebench</h1>
+          <p class="subtitle">Trustless Sparse Solver Challenge · <code>signed-three-band-backward80-v2</code></p>
+        </div>
+      </div>
+      <div class="next-round-pill" id="next-round-pill">
+        <span class="pill-label">Next Official Round</span>
+        <span class="pill-value mono" id="next-round-countdown">Loading…</span>
+        <span class="pill-sub mono" id="next-round-meta"></span>
+      </div>
+    </div>
+    <nav class="nav-bar">
+      <div class="container nav-inner" role="tablist">
+        <button class="nav-tab active" data-tab="leaderboard" role="tab">Leaderboard</button>
+        <button class="nav-tab" data-tab="rounds" role="tab">Head-to-Head Rounds</button>
+        <button class="nav-tab" data-tab="entrants" role="tab">Entrants</button>
+        <button class="nav-tab" data-tab="submit" role="tab">Schedule &amp; Submit</button>
+        <button class="nav-tab" data-tab="data" role="tab">Download &amp; Verify</button>
+      </div>
+    </nav>
+  </header>
+
+  <main class="container main-content">
+    <!-- Status banner -->
+    <div id="status-banner" class="banner hidden"></div>
+
+    <!-- Summary stat strip -->
+    <section class="stats-strip" id="stats-strip">
+      <div class="stat-card">
+        <span class="stat-label">Verified Solves</span>
+        <span class="stat-value mono" id="stat-total">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Fastest 2<sup>23</sup> (8.39M)</span>
+        <span class="stat-value mono" id="stat-best-23">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Fastest 2<sup>26</sup> (67.1M)</span>
+        <span class="stat-value mono" id="stat-best-26">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Distinct Keys</span>
+        <span class="stat-value mono" id="stat-entrants">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Last Batch Update</span>
+        <span class="stat-value mono small" id="stat-updated">—</span>
+      </div>
+    </section>
+
+    <!-- TAB 1: LEADERBOARD -->
+    <section id="tab-leaderboard" class="tab-panel active">
+      <div class="controls-bar">
+        <div class="tier-pills" id="tier-pills">
+          <button class="tier-pill active" data-rows="8388608">2<sup>23</sup> · 8,388,608 rows</button>
+          <button class="tier-pill" data-rows="67108864">2<sup>26</sup> · 67,108,864 rows</button>
+          <button class="tier-pill" data-rows="all">All Sizes</button>
+        </div>
+        <div class="filter-controls">
+          <input type="search" id="search-input" placeholder="Filter solver, entrant, pubkey, round…" aria-label="Filter entries">
+          <select id="sort-select" aria-label="Sort entries">
+            <option value="elapsed_asc">Sort: Certified Time ↑</option>
+            <option value="berr_asc">Sort: Backward Error ↑</option>
+            <option value="newest">Sort: Most Recent ↓</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Certified Time</th>
+              <th>Backward Error</th>
+              <th>Solver / Entrant</th>
+              <th>Size</th>
+              <th>Start Round</th>
+              <th>Self-Reported</th>
+              <th>Proof</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-tbody">
+            <tr><td colspan="8" class="empty-cell">Loading verified results…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 2: HEAD-TO-HEAD ROUNDS -->
+    <section id="tab-rounds" class="tab-panel">
+      <div class="section-intro">
+        <h2>Head-to-Head Rounds</h2>
+        <p>Every entrant on the same <code>(start_round, rows)</code> solves the exact same seeded symmetric-indefinite sparse matrix and right-hand side on the same drand Quicknet → Sigstore RFC 3161 clock.</p>
+      </div>
+      <div id="rounds-container" class="cards-stack"></div>
+    </section>
+
+    <!-- TAB 3: ENTRANTS -->
+    <section id="tab-entrants" class="tab-panel">
+      <div class="section-intro">
+        <h2>Entrants (Grouped by Ed25519 Key)</h2>
+        <p>Submissions signed with the same Ed25519 private key are grouped together automatically without any accounts or OAuth providers.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Entrant / Key</th>
+              <th>Verified Solves</th>
+              <th>Best 2<sup>23</sup></th>
+              <th>Best 2<sup>26</sup></th>
+              <th>Latest Solver</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="entrants-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TAB 4: SCHEDULE & SUBMIT -->
+    <section id="tab-submit" class="tab-panel">
+      <div class="two-col">
+        <div class="panel-card">
+          <h2>Official Daily Schedule (5 Rounds / UTC Day)</h2>
+          <p class="muted">Official <code>start_round</code>s occur every 4h 48m (<code>00:00</code>, <code>04:48</code>, <code>09:36</code>, <code>14:24</code>, <code>19:12 UTC</code>). Pick your own <code>proof_round &gt; start_round</code>, stamp with Sigstore Public Good, and register with <code>ENTRY = ed25519:&lt;pubkey&gt;</code>.</p>
+          <div class="table-wrap compact">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Start Round</th>
+                  <th>UTC Release</th>
+                  <th>Your Local Time</th>
+                  <th>Countdown</th>
+                </tr>
+              </thead>
+              <tbody id="schedule-tbody"></tbody>
+            </table>
+          </div>
+
+          <h3>CLI Quickstart (Humans &amp; AI Agents)</h3>
+          <pre class="code-block" id="cli-snippet"></pre>
+        </div>
+
+        <div class="panel-card">
+          <h2>Upload Signed Certificate</h2>
+          <p class="muted">Create <code>metadata.json</code> and <code>submission.sig</code> with <code>spsolve_bench.py sign</code>, or use <code>spsolve_bench.py submit</code> directly from the CLI. This form computes the anti-abuse Hashcash PoW right in your browser.</p>
+          <form id="upload-form" class="upload-form">
+            <label>
+              <span><code>proof.bin</code> (STNPRF03 transcript)</span>
+              <input type="file" id="file-proof" required>
+            </label>
+            <label>
+              <span><code>metadata.json</code> (exact signed JSON bytes)</span>
+              <input type="file" id="file-metadata" accept=".json,application/json" required>
+            </label>
+            <label>
+              <span><code>submission.sig</code> (128-char hex Ed25519 signature)</span>
+              <input type="text" id="input-sig" class="mono" placeholder="128 lowercase hex chars…" required pattern="[0-9a-fA-F]{128}">
+            </label>
+            <button type="submit" class="btn-primary" id="upload-btn">Solve PoW &amp; Submit</button>
+            <div id="upload-status" class="upload-status hidden"></div>
+          </form>
+
+          <hr class="divider">
+          <h3>Check Submission Status</h3>
+          <form id="status-form" class="inline-form">
+            <input type="text" id="status-id-input" class="mono" placeholder="64-char hex attempt ID…" required>
+            <button type="submit" class="btn-secondary">Check</button>
+          </form>
+          <pre id="status-output" class="code-block hidden"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: DOWNLOAD & VERIFY -->
+    <section id="tab-data" class="tab-panel">
+      <div class="panel-card">
+        <h2>Open Data &amp; Offline Cryptographic Verification</h2>
+        <p class="muted">All verified results and raw <code>STNPRF03</code> transcripts are served directly as static files. Anyone can download the complete archive and independently re-verify every entry with the reference C <code>stencil</code> binary.</p>
+
+        <div class="download-grid">
+          <a class="download-card" id="dl-index" href="#" target="_blank" rel="noopener noreferrer">
+            <strong>public/index.json</strong>
+            <span>Compact summary index of all verified solves</span>
+          </a>
+          <a class="download-card" id="dl-dataset" href="#" target="_blank" rel="noopener noreferrer">
+            <strong>public/dataset.jsonl.gz</strong>
+            <span>Complete compressed dataset (all certified fields + compute/algorithm writeups)</span>
+          </a>
+        </div>
+
+        <h3>Pinned Trust Parameters</h3>
+        <ul class="trust-list mono">
+          <li>Profile: <code>signed-three-band-backward80-v2</code> (rows &isin; {2<sup>23</sup>, 2<sup>26</sup>})</li>
+          <li>drand Quicknet chain: <code>52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971</code></li>
+          <li>TSA provider: Sigstore Public Good (<code>1.3.6.1.4.1.57264.2</code>)</li>
+          <li>Pinned TSA Root DER SHA-256: <code>2aca8fea5d3ce48b01cc77076293c280e6c23ffe44034757ee7833ca9f45d633</code></li>
+          <li>Target accuracy: <code>backward_2_upper &le; 2<sup>-53</sup></code> (~1.11e-16), checked with exact integers</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- Detail Modal / Drawer -->
+  <div id="detail-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-title">Submission Details</h2>
+          <p class="mono muted small" id="modal-subtitle"></p>
+        </div>
+        <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <p class="muted">Loading verified record…</p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span>Powered by <a href="https://github.com/ReidAtcheson/sparse-solver-challenge" target="_blank" rel="noopener noreferrer">sparse-solver-challenge</a> · Verification runs in batches 5&times;/day</span>
+      <span class="mono small" id="footer-utc"></span>
+    </div>
+  </footer>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "site_name": "spsolvebench",
+  "site_domain": "spsolvebench.com",
+  "profile_id": "signed-three-band-backward80-v2",
+  "allowed_rows": [8388608, 67108864],
+  "max_proof_bytes_by_rows": {
+    "8388608": 262144,
+    "67108864": 655360
+  },
+  "drand": {
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "genesis_utc": 1692803367,
+    "period_s": 3,
+    "rounds_per_day": 5,
+    "round_interval_s": 17280,
+    "launch_round": 34250000
+  },
+  "tsa": {
+    "provider": "sigstore",
+    "url": "https://timestamp.sigstore.dev/api/v1/timestamp",
+    "policy_oid": "1.3.6.1.4.1.57264.2",
+    "root_der_sha256": "2aca8fea5d3ce48b01cc77076293c280e6c23ffe44034757ee7833ca9f45d633",
+    "min_clock_error_ns": 1000000000
+  },
+  "submission": {
+    "pow_bits": 22,
+    "pow_bucket_s": 600,
+    "pow_max_bucket_skew": 1,
+    "max_metadata_bytes": 12288,
+    "max_description_bytes": 4096,
+    "max_short_field_chars": 64,
+    "max_url_chars": 256,
+    "max_pending_queue": 200
+  },
+  "domains": {
+    "entry_prefix": "ed25519:",
+    "stencil_entry": "stencil-entry-v1",
+    "stencil_attempt": "stencil-quicknet-attempt-v1",
+    "submit_sig": "spsolve-leaderboard-submit-v1\n",
+    "submit_pow": "spsolve-submit-pow-v1\n"
+  }
+}

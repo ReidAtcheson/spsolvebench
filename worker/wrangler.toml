@@ -1,0 +1,20 @@
+name = "spsolvebench-api"
+main = "src/index.js"
+compatibility_date = "2025-11-01"
+
+# Create bucket first with: npx wrangler r2 bucket create spsolvebench-data
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "spsolvebench-data"
+
+[vars]
+ALLOWED_ORIGIN = "*"
+# Uncomment to override config/protocol.json defaults:
+# POW_BITS = "22"
+# LAUNCH_ROUND = "34250000"
+# MAX_PENDING_QUEUE = "200"
+
+# Once you attach your custom domain in Cloudflare DNS, uncomment:
+# [[routes]]
+# pattern = "api.spsolvebench.com/*"
+# custom_domain = true
