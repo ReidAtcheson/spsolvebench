@@ -33,7 +33,7 @@ import uuid
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
 
-DEFAULT_API = "https://api.spsolvebench.com"
+DEFAULT_API = "https://spsolvebench-api.reidatcheson.workers.dev"
 CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
 GENESIS_UTC = 1692803367
 PERIOD_S = 3

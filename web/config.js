@@ -12,7 +12,9 @@ const isLocal =
   window.location.hostname === "127.0.0.1" ||
   window.location.protocol === "file:";
 
-const DEFAULT_API = isLocal ? "http://127.0.0.1:8787" : "https://api.spsolvebench.com";
+const DEFAULT_API = isLocal
+  ? "http://127.0.0.1:8787"
+  : "https://spsolvebench-api.reidatcheson.workers.dev";
 const DEFAULT_DATA = isLocal ? "./local-data" : `${DEFAULT_API}/data`;
 
 window.SPSOLVE_CONFIG = {
