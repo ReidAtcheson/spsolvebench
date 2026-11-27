@@ -14,7 +14,6 @@ ALLOWED_ORIGIN = "*"
 # LAUNCH_ROUND = "34250000"
 # MAX_PENDING_QUEUE = "200"
 
-# Once you attach your custom domain in Cloudflare DNS, uncomment:
-# [[routes]]
-# pattern = "api.spsolvebench.com/*"
-# custom_domain = true
+[[routes]]
+pattern = "api.spsolvebench.com"
+custom_domain = true
