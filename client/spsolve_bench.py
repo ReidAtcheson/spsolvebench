@@ -259,7 +259,11 @@ def cmd_submit(args: argparse.Namespace) -> int:
     pow_bucket_s = DEFAULT_POW_BUCKET_S
     if pow_bits is None:
         try:
-            with urllib.request.urlopen(f"{api}/health", timeout=10) as resp:
+            health_req = urllib.request.Request(
+                f"{api}/health",
+                headers={"User-Agent": "spsolvebench-client/1.0"},
+            )
+            with urllib.request.urlopen(health_req, timeout=10) as resp:
                 health = json.loads(resp.read().decode("utf-8"))
                 pow_bits = int(health.get("submission", {}).get("pow_bits", DEFAULT_POW_BITS))
                 pow_bucket_s = int(health.get("submission", {}).get("pow_bucket_s", DEFAULT_POW_BUCKET_S))
@@ -306,8 +310,9 @@ def cmd_submit(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     api = args.api.rstrip("/")
     url = f"{api}/status/{args.id.strip().lower()}"
+    req = urllib.request.Request(url, headers={"User-Agent": "spsolvebench-client/1.0"})
     try:
-        with urllib.request.urlopen(url, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             print(resp.read().decode("utf-8"))
             return 0
     except urllib.error.HTTPError as err:
