@@ -45,9 +45,17 @@
   - `display_name` (<= 64 chars)
   - `solver_name` (<= 64 chars)
   - `repo_url` (`http(s)` URL, <= 256 chars)
+  - `hardware` (optional structured self-reported specs of the **solver machine**, totals across all nodes):
+    - `cpu_model` (string <= 96 chars, e.g. `"AMD EPYC 7B13"`)
+    - `cpu_cores` (integer in `[1, 1000000]`)
+    - `ram_gib` (number in `(0, 10000000]`)
+    - `gpu_model` (string <= 96 chars, e.g. `"NVIDIA H100 80GB"`)
+    - `gpu_count` (integer in `[0, 100000]`; `0` for CPU-only)
+    - `node_count` (integer in `[1, 100000]`; `1` for single-node)
   - `compute_description` (unstructured hardware/environment writeup, <= 4 KiB)
   - `algorithm_description` (unstructured solver/algorithm writeup, <= 4 KiB)
   - `self_reported`: `{ "solve_wall_s": number, "peak_rss_mib": number }`
+  - Note: String fields (`display_name`, `solver_name`, `repo_url`, `hardware.cpu_model`, `hardware.gpu_model`, `compute_description`, `algorithm_description`) are checked by automated moderation after cryptographic proof verification; flagged text is hidden while the certified score and validated numeric hardware counts are preserved.
 
 ## HTTP API Endpoints
 
@@ -73,19 +81,24 @@ python3 client/spsolve_bench.py keygen --out my.key
 # 3. Inspect upcoming official 5/day UTC start rounds
 python3 client/spsolve_bench.py schedule --count 5
 
-# 4. Run your solver on the next official round, stamp with Sigstore, and prove
+# 4. (Optional) Snapshot solver machine specs before shutting down a cloud VM
+python3 client/spsolve_bench.py detect-hardware --out hardware.json
+
+# 5. Run your solver on the next official round, stamp with Sigstore, and prove
+#    (`run` also saves ./run1/public/hardware.json automatically on the solver host)
 python3 client/spsolve_bench.py run --key my.key \
   --stencil-dir /path/to/sparse-solver-challenge \
   --work-dir ./run1 --rows 8388608 --proof-window-s 3600 \
   --solver-cmd ./my_solver
 
-# 5. Sign, solve Hashcash PoW, and submit
+# 6. Sign, solve Hashcash PoW, and submit (can run from any machine using --hardware-file or explicit flags)
 python3 client/spsolve_bench.py submit --key my.key \
   --proof ./run1/public/proof.bin \
+  --hardware-file ./run1/public/hardware.json \
   --display-name "My Team" --solver-name "my-solver-v1" \
-  --compute-description "8-core Zen 3, 32 GiB RAM" \
+  --compute-description "GCP t2d-standard-8, swap disabled" \
   --algorithm-description "Multifrontal LDLT + GMRES iterative refinement"
 
-# 6. Check verification status (batches run 5x/day at 00:00, 05:00, 10:00, 15:00, 20:00 UTC)
+# 7. Check verification status (batches run 5x/day at 00:00, 05:00, 10:00, 15:00, 20:00 UTC)
 python3 client/spsolve_bench.py status --id <attempt_id>
 ```

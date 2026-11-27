@@ -90,6 +90,9 @@ def test_python_js_cross_parity() -> None:
         proof_p = td_p / "proof.bin"
         proof_p.write_bytes(proof_bytes)
 
+        hw_p = td_p / "hardware.json"
+        subprocess.run([sys.executable, str(ROOT / "client" / "spsolve_bench.py"), "detect-hardware", "--out", str(hw_p)], check=True, capture_output=True)
+
         subprocess.run(
             [
                 sys.executable,
@@ -98,6 +101,7 @@ def test_python_js_cross_parity() -> None:
                 "--key", str(key_p),
                 "--proof", str(proof_p),
                 "--out-dir", str(td_p),
+                "--hardware-file", str(hw_p),
                 "--display-name", "Parity Team",
                 "--solver-name", "parity-solver",
                 "--compute-description", "8-core Zen 3, 32 GiB RAM",
@@ -216,6 +220,13 @@ def test_real_sigstore_proof_and_moderation(stencil_bin: Path, ca_path: Path) ->
             "display_name": "Gemini 4 Neon High",
             "solver_name": "spsolve-v6-int16",
             "repo_url": "https://github.com/ReidAtcheson/sparse-solver-challenge",
+            "hardware": {
+                "cpu_model": "AMD EPYC 7B13",
+                "cpu_cores": 8,
+                "ram_gib": 32,
+                "gpu_count": 0,
+                "node_count": 1,
+            },
             "compute_description": "GCP t2d-standard-8 (8 AMD Zen 3 cores, 32 GiB RAM)",
             "algorithm_description": "C++20 multifrontal Bunch-Kaufman with int16 L archiving + right-preconditioned GMRES.",
             "self_reported": {"solve_wall_s": 49.12, "peak_rss_mib": 5950.5},
@@ -271,6 +282,8 @@ def test_real_sigstore_proof_and_moderation(stencil_bin: Path, ca_path: Path) ->
 
             entry = json.loads(bucket.get_bytes(f"verified/{aid}/entry.json").decode("utf-8"))
             assert entry["certified"]["target"] == "pass"
+            assert entry["entrant"]["hardware"]["cpu_model"] == "AMD EPYC 7B13"
+            assert row["hardware"]["cpu_cores"] == 8
             assert entry["entrant"]["compute_description"].startswith("GCP t2d-standard-8")
             assert bucket.exists(f"verified/{aid}/proof.bin")
             assert bucket.exists(f"verified/{aid}/metadata.json")
@@ -297,6 +310,8 @@ def test_real_sigstore_proof_and_moderation(stencil_bin: Path, ca_path: Path) ->
             assert entry["entrant"]["description_hidden"] is True
             assert "compute_description" not in entry["entrant"]
             assert "display_name" not in entry["entrant"]
+            assert "cpu_model" not in entry["entrant"].get("hardware", {})
+            assert entry["entrant"]["hardware"]["cpu_cores"] == 8
             assert not bucket.exists(f"verified/{aid}/metadata.json")
             assert bucket.exists(f"quarantine/{aid}/metadata.json")
             assert entry["certified"]["elapsed_s"] == 49.0

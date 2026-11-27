@@ -29,6 +29,7 @@
     "max_metadata_bytes": 12288,
     "max_description_bytes": 4096,
     "max_short_field_chars": 64,
+    "max_hardware_model_chars": 96,
     "max_url_chars": 256,
     "max_pending_queue": 200
   },

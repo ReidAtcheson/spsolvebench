@@ -6,6 +6,7 @@
     indexData: null,
     activeTab: "leaderboard",
     selectedRows: "8388608",
+    computeFilter: "all",
     searchQuery: "",
     sortBy: "elapsed_asc",
     entryCache: new Map(),
@@ -77,6 +78,29 @@
     return Number.isFinite(num) ? num.toExponential(2) : String(strOrNum);
   }
 
+  function isGpuHardware(hw) {
+    if (!hw || typeof hw !== "object") return false;
+    return (Number(hw.gpu_count) || 0) > 0 || Boolean(hw.gpu_model);
+  }
+
+  function fmtHardwareSummary(hw) {
+    if (!hw || typeof hw !== "object") return { primary: "—", secondary: "" };
+    const parts = [];
+    if (hw.node_count && hw.node_count > 1) parts.push(`${hw.node_count} nodes`);
+    if (isGpuHardware(hw)) {
+      const gCnt = hw.gpu_count ? `${hw.gpu_count}× ` : "";
+      parts.push(`${gCnt}${hw.gpu_model || "GPU"}`);
+    }
+    const cpuBits = [];
+    if (hw.cpu_cores) cpuBits.push(`${hw.cpu_cores}c`);
+    if (hw.cpu_model) cpuBits.push(hw.cpu_model);
+    if (hw.ram_gib) cpuBits.push(`${hw.ram_gib} GiB`);
+    if (parts.length === 0) {
+      return { primary: cpuBits.join(" · ") || "—", secondary: "" };
+    }
+    return { primary: parts.join(" · "), secondary: cpuBits.join(" · ") };
+  }
+
   function drandRoundUtc(rnd) {
     return CFG.DRAND_GENESIS_UTC + CFG.DRAND_PERIOD_S * (rnd - 1);
   }
@@ -143,10 +167,15 @@
     const q = state.searchQuery.trim().toLowerCase();
     const filtered = entries.filter((e) => {
       if (state.selectedRows !== "all" && String(e.rows) !== state.selectedRows) return false;
+      if (state.computeFilter === "gpu" && !isGpuHardware(e.hardware)) return false;
+      if (state.computeFilter === "cpu" && (!e.hardware || isGpuHardware(e.hardware))) return false;
       if (!q) return true;
+      const hw = e.hardware || {};
       const hay = [
         e.display_name || "",
         e.solver_name || "",
+        hw.cpu_model || "",
+        hw.gpu_model || "",
         e.pubkey || "",
         e.pubkey_short || "",
         String(e.start_round),
@@ -193,9 +222,15 @@
         text: e.display_name ? `${e.display_name} · ${e.pubkey_short}` : e.pubkey_short,
       });
 
-      const srParts = [];
-      if (e.solve_wall_s != null) srParts.push(`solve ${fmtDuration(e.solve_wall_s)}`);
-      if (e.peak_rss_mib != null) srParts.push(`${(e.peak_rss_mib / 1024).toFixed(2)} GiB`);
+      const hwFmt = fmtHardwareSummary(e.hardware);
+      const hwCellChildren = [el("span", { class: "small", text: hwFmt.primary })];
+      if (hwFmt.secondary) {
+        hwCellChildren.push(el("span", { class: "entrant-sub mono", style: "display:block", text: hwFmt.secondary }));
+      } else if (e.peak_rss_mib != null) {
+        hwCellChildren.push(
+          el("span", { class: "entrant-sub mono", style: "display:block", text: `RSS ${(e.peak_rss_mib / 1024).toFixed(2)} GiB` })
+        );
+      }
 
       const tr = el(
         "tr",
@@ -205,9 +240,9 @@
           el("td", { class: "mono time-cell", text: fmtDuration(e.elapsed_s) }),
           el("td", { class: "mono", text: fmtSci(e.backward_2_upper) }),
           el("td", {}, [solverLine, entrantLine]),
+          el("td", {}, hwCellChildren),
           el("td", { class: "mono small", text: fmtRowsShort(e.rows) }),
           el("td", { class: "mono small", text: String(e.start_round) }),
-          el("td", { class: "mono small muted", text: srParts.join(" · ") || "—" }),
           el("td", { class: "mono small" }, el("span", { class: "badge badge-pass", text: fmtBytes(e.proof_bytes) })),
         ]
       );
@@ -371,6 +406,25 @@
 
     const children = [kv];
 
+    if (ent.hardware && Object.keys(ent.hardware).length > 0) {
+      const hw = ent.hardware;
+      const hwItems = [];
+      if (hw.cpu_model) hwItems.push(el("div", { class: "kv-item" }, [el("span", { class: "k", text: "CPU SKU" }), el("span", { class: "v", text: hw.cpu_model })]));
+      if (hw.cpu_cores != null) hwItems.push(el("div", { class: "kv-item" }, [el("span", { class: "k", text: "CPU Cores (Total)" }), el("span", { class: "v", text: String(hw.cpu_cores) })]));
+      if (hw.ram_gib != null) hwItems.push(el("div", { class: "kv-item" }, [el("span", { class: "k", text: "System RAM" }), el("span", { class: "v", text: `${hw.ram_gib} GiB` })]));
+      if (hw.gpu_model) hwItems.push(el("div", { class: "kv-item" }, [el("span", { class: "k", text: "GPU SKU" }), el("span", { class: "v", text: hw.gpu_model })]));
+      if (hw.gpu_count != null) hwItems.push(el("div", { class: "kv-item" }, [el("span", { class: "k", text: "GPU Count" }), el("span", { class: "v", text: String(hw.gpu_count) })]));
+      if (hw.node_count != null) hwItems.push(el("div", { class: "kv-item" }, [el("span", { class: "k", text: "Nodes" }), el("span", { class: "v", text: String(hw.node_count) })]));
+      if (hwItems.length > 0) {
+        children.push(
+          el("div", {}, [
+            el("h3", { style: "margin:0 0 8px", text: "Hardware (Self-Reported)" }),
+            el("div", { class: "kv-grid" }, hwItems),
+          ])
+        );
+      }
+    }
+
     const safeRepo = safeHttpUrl(ent.repo_url);
     if (safeRepo) {
       children.push(
@@ -475,11 +529,12 @@
       "  --work-dir ./run1 --rows 8388608 --proof-window-s 3600 \\",
       "  --solver-cmd ./my_solver",
       "",
-      "# 3. Sign, solve Hashcash PoW, and submit",
+      "# 3. Sign, solve Hashcash PoW, and submit (pass hardware.json from solver host or explicit flags)",
       `python3 client/spsolve_bench.py submit --key my.key \\`,
       `  --api ${CFG.API_BASE} --proof ./run1/public/proof.bin \\`,
+      `  --hardware-file ./run1/public/hardware.json \\`,
       `  --display-name "My Team" --solver-name "my-solver-v1" \\`,
-      `  --compute-description "8-core Zen 3, 32 GiB RAM" \\`,
+      `  --compute-description "GCP t2d-standard-8, swap disabled" \\`,
       `  --algorithm-description "Multifrontal LDLT + GMRES refinement"`,
     ].join("\n");
   }
@@ -633,6 +688,11 @@
 
     $("search-input").addEventListener("input", (e) => {
       state.searchQuery = e.target.value;
+      renderLeaderboard();
+    });
+
+    $("compute-filter").addEventListener("change", (e) => {
+      state.computeFilter = e.target.value;
       renderLeaderboard();
     });
 

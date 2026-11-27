@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import secrets
 import shutil
 import subprocess
@@ -113,6 +114,73 @@ def sign_submission(priv: Ed25519PrivateKey, proof_bytes: bytes, metadata_bytes:
     return priv.sign(msg).hex()
 
 
+def detect_local_hardware(node_count: int = 1) -> dict[str, Any]:
+    """Detect local CPU, RAM, and NVIDIA GPU specs (intended for the solver host)."""
+    hw: dict[str, Any] = {}
+
+    cpu_model = ""
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.is_file():
+        for line in cpuinfo.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line.lower().startswith("model name") and ":" in line:
+                cpu_model = " ".join(line.split(":", 1)[1].strip().split())
+                break
+    if not cpu_model and sys.platform == "darwin":
+        try:
+            cpu_model = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+        except Exception:
+            pass
+    if not cpu_model:
+        cpu_model = platform.processor().strip()
+    if cpu_model:
+        hw["cpu_model"] = cpu_model[:96]
+
+    cores = os.cpu_count()
+    if cores and cores >= 1:
+        hw["cpu_cores"] = int(cores) * max(1, int(node_count))
+
+    meminfo = Path("/proc/meminfo")
+    if meminfo.is_file():
+        for line in meminfo.read_text(encoding="utf-8", errors="ignore").splitlines():
+            if line.startswith("MemTotal:"):
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].isdigit():
+                    gib = round((int(parts[1]) / (1024 * 1024)) * max(1, int(node_count)), 1)
+                    if gib > 0:
+                        hw["ram_gib"] = gib
+                break
+    elif sys.platform == "darwin":
+        try:
+            b = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip())
+            gib = round((b / (1024 ** 3)) * max(1, int(node_count)), 1)
+            if gib > 0:
+                hw["ram_gib"] = gib
+        except Exception:
+            pass
+
+    gpu_count = 0
+    gpu_model = ""
+    if shutil.which("nvidia-smi"):
+        try:
+            out = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            names = [line.strip() for line in out.splitlines() if line.strip()]
+            if names:
+                gpu_count = len(names) * max(1, int(node_count))
+                gpu_model = names[0][:96]
+        except Exception:
+            pass
+    hw["gpu_count"] = gpu_count
+    if gpu_model:
+        hw["gpu_model"] = gpu_model
+    hw["node_count"] = max(1, int(node_count))
+    return hw
+
+
 def build_metadata(args: argparse.Namespace, pubkey_hex: str) -> bytes:
     meta: dict[str, Any] = {"pubkey": pubkey_hex}
     if getattr(args, "display_name", None):
@@ -121,6 +189,34 @@ def build_metadata(args: argparse.Namespace, pubkey_hex: str) -> bytes:
         meta["solver_name"] = args.solver_name
     if getattr(args, "repo_url", None):
         meta["repo_url"] = args.repo_url
+
+    hw: dict[str, Any] = {}
+    if getattr(args, "hardware_file", None):
+        loaded = json.loads(Path(args.hardware_file).read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError("--hardware-file must contain a JSON object")
+        hw.update(loaded)
+    elif getattr(args, "detect_hardware", False):
+        hw = detect_local_hardware(node_count=getattr(args, "node_count", None) or 1)
+        print(
+            f"[hardware] Detected local host specs (use --hardware-file if solved on another machine): {json.dumps(hw)}",
+            file=sys.stderr,
+        )
+
+    for key, attr in (
+        ("cpu_model", "cpu_model"),
+        ("cpu_cores", "cpu_cores"),
+        ("ram_gib", "ram_gib"),
+        ("gpu_model", "gpu_model"),
+        ("gpu_count", "gpu_count"),
+        ("node_count", "node_count"),
+    ):
+        val = getattr(args, attr, None)
+        if val is not None:
+            hw[key] = val
+    hw = {k: v for k, v in hw.items() if v not in (None, "")}
+    if hw:
+        meta["hardware"] = hw
 
     compute_desc = getattr(args, "compute_description", None)
     if getattr(args, "compute_file", None):
@@ -216,6 +312,19 @@ def cmd_keygen(args: argparse.Namespace) -> int:
     os.chmod(out, 0o600)
     print(f"Saved Ed25519 key to {out}")
     print(f"Entrant ID (for stencil beacon-register): ed25519:{pub_hex}")
+    return 0
+
+
+def cmd_detect_hardware(args: argparse.Namespace) -> int:
+    hw = detect_local_hardware(node_count=args.node_count)
+    text = json.dumps(hw, indent=2) + "\n"
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8")
+        print(f"Wrote hardware snapshot to {out}: {json.dumps(hw)}", file=sys.stderr)
+    else:
+        print(text, end="")
     return 0
 
 
@@ -417,6 +526,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         check=True,
     )
 
+    # Save hardware snapshot from the solver host so you can submit later from any machine
+    hw_out = pub_dir / "hardware.json"
+    hw_out.write_text(json.dumps(detect_local_hardware(), indent=2) + "\n", encoding="utf-8")
+
     # Local offline self-verification before submitting
     shutil.copyfile(reg_p, pub_dir / "reg")
     shutil.copyfile(priv_dir / "digest", pub_dir / "winner.digest")
@@ -430,7 +543,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(ver.stderr.strip(), file=sys.stderr)
         return ver.returncode
 
-    print(f"[run] Proof verified locally: {proof_out} (solve_wall_s={solve_wall_s:.2f}s)")
+    print(f"[run] Proof verified locally: {proof_out} (solve_wall_s={solve_wall_s:.2f}s, hardware={hw_out})")
     return 0
 
 
@@ -447,6 +560,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_sc.add_argument("--count", type=int, default=5)
     p_sc.set_defaults(func=cmd_schedule)
 
+    p_hw = sub.add_parser("detect-hardware", help="Snapshot local solver host CPU/RAM/GPU specs to JSON")
+    p_hw.add_argument("--out", default=None, help="Output JSON file path (default: stdout)")
+    p_hw.add_argument("--node-count", type=int, default=1, help="Multiply per-node counts for homogeneous multi-node runs")
+    p_hw.set_defaults(func=cmd_detect_hardware)
+
     for name, fn, help_str in [
         ("sign", cmd_sign, "Write signed metadata.json and submission.sig locally"),
         ("submit", cmd_submit, "Sign, compute Hashcash PoW, and POST proof.bin to /submit"),
@@ -457,6 +575,14 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--display-name", default=None)
         p.add_argument("--solver-name", default=None)
         p.add_argument("--repo-url", default=None)
+        p.add_argument("--hardware-file", default=None, help="JSON snapshot from `detect-hardware` or `run` (recommended when submitting from another host)")
+        p.add_argument("--detect-hardware", action="store_true", help="Opt-in: detect specs of THIS machine (only use if solving happened on this host)")
+        p.add_argument("--cpu-model", default=None, help="CPU SKU/model string (<= 96 chars)")
+        p.add_argument("--cpu-cores", type=int, default=None, help="Total CPU cores/vCPUs across all nodes")
+        p.add_argument("--ram-gib", type=float, default=None, help="Total system RAM in GiB across all nodes")
+        p.add_argument("--gpu-model", default=None, help="GPU SKU/model string (<= 96 chars)")
+        p.add_argument("--gpu-count", type=int, default=None, help="Total GPUs across all nodes (0 for CPU-only)")
+        p.add_argument("--node-count", type=int, default=None, help="Number of compute nodes (default 1)")
         p.add_argument("--compute-description", default=None)
         p.add_argument("--compute-file", default=None)
         p.add_argument("--algorithm-description", default=None)

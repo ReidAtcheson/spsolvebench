@@ -246,13 +246,31 @@ def build_entry_record(
         "pubkey_short": f"ed25519:{pubkey[:8]}...{pubkey[-6:]}",
         "description_hidden": redacted,
     }
+    hw_raw = meta.get("hardware")
     if not redacted:
         for k in ("display_name", "solver_name", "repo_url", "compute_description", "algorithm_description", "self_reported"):
             if meta.get(k) not in (None, ""):
                 public_meta[k] = meta[k]
+        if isinstance(hw_raw, dict):
+            clean_hw = {
+                k: hw_raw[k]
+                for k in ("cpu_model", "cpu_cores", "ram_gib", "gpu_model", "gpu_count", "node_count")
+                if hw_raw.get(k) not in (None, "")
+            }
+            if clean_hw:
+                public_meta["hardware"] = clean_hw
     else:
         if meta.get("self_reported") is not None:
             public_meta["self_reported"] = meta["self_reported"]
+        if isinstance(hw_raw, dict):
+            # Keep strictly validated numeric hardware specs even if string fields were redacted
+            numeric_hw = {
+                k: hw_raw[k]
+                for k in ("cpu_cores", "ram_gib", "gpu_count", "node_count")
+                if hw_raw.get(k) is not None
+            }
+            if numeric_hw:
+                public_meta["hardware"] = numeric_hw
 
     return {
         "schema_version": 1,
@@ -307,6 +325,7 @@ def make_index_row(entry: dict[str, Any]) -> dict[str, Any]:
     ent = entry["entrant"]
     cert = entry["certified"]
     sr = ent.get("self_reported") or {}
+    hw = ent.get("hardware")
     return {
         "id": entry["id"],
         "rows": entry["rows"],
@@ -323,6 +342,7 @@ def make_index_row(entry: dict[str, Any]) -> dict[str, Any]:
         "display_name": ent.get("display_name"),
         "solver_name": ent.get("solver_name"),
         "repo_url": ent.get("repo_url"),
+        "hardware": hw if isinstance(hw, dict) and hw else None,
         "solve_wall_s": sr.get("solve_wall_s"),
         "peak_rss_mib": sr.get("peak_rss_mib"),
         "has_writeup": bool(ent.get("compute_description") or ent.get("algorithm_description")),

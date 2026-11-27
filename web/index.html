@@ -141,7 +141,12 @@
           <button class="tier-pill" data-rows="all">All Sizes</button>
         </div>
         <div class="filter-controls">
-          <input type="search" id="search-input" placeholder="Filter solver, entrant, pubkey, round…" aria-label="Filter entries">
+          <input type="search" id="search-input" placeholder="Filter solver, hardware, entrant, round…" aria-label="Filter entries">
+          <select id="compute-filter" aria-label="Filter by compute class">
+            <option value="all">Compute: All</option>
+            <option value="cpu">Compute: CPU-only</option>
+            <option value="gpu">Compute: GPU</option>
+          </select>
           <select id="sort-select" aria-label="Sort entries">
             <option value="elapsed_asc">Sort: Certified Time ↑</option>
             <option value="berr_asc">Sort: Backward Error ↑</option>
@@ -158,9 +163,9 @@
               <th>Certified Time</th>
               <th>Backward Error</th>
               <th>Solver / Entrant</th>
+              <th>Hardware</th>
               <th>Size</th>
               <th>Start Round</th>
-              <th>Self-Reported</th>
               <th>Proof</th>
             </tr>
           </thead>

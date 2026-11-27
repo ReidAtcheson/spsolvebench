@@ -249,6 +249,26 @@ def validate_metadata(metadata_bytes: bytes, cfg: dict[str, Any]) -> dict[str, A
             if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):
                 raise ValidationError(f"metadata.self_reported.{num_field} must be a non-negative number")
 
+    hw = meta.get("hardware")
+    if hw is not None:
+        if not isinstance(hw, dict):
+            raise ValidationError("metadata.hardware must be an object")
+        max_model = int(sub_cfg.get("max_hardware_model_chars", 96))
+        for str_field in ("cpu_model", "gpu_model"):
+            v = hw.get(str_field)
+            if v is not None:
+                if not isinstance(v, str) or len(v) > max_model:
+                    raise ValidationError(f"metadata.hardware.{str_field} must be a string <= {max_model} chars")
+        for int_field, lo, hi in (("cpu_cores", 1, 1_000_000), ("gpu_count", 0, 100_000), ("node_count", 1, 100_000)):
+            v = hw.get(int_field)
+            if v is not None:
+                if not isinstance(v, int) or isinstance(v, bool) or v < lo or v > hi:
+                    raise ValidationError(f"metadata.hardware.{int_field} must be an integer in [{lo}, {hi}]")
+        ram = hw.get("ram_gib")
+        if ram is not None:
+            if not isinstance(ram, (int, float)) or isinstance(ram, bool) or ram <= 0 or ram > 10_000_000:
+                raise ValidationError("metadata.hardware.ram_gib must be a number in (0, 10000000]")
+
     return meta
 
 

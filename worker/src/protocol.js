@@ -274,6 +274,40 @@ export function validateMetadata(metadataBytes, cfg) {
     }
   }
 
+  if (meta.hardware !== undefined && meta.hardware !== null) {
+    if (typeof meta.hardware !== "object" || Array.isArray(meta.hardware)) {
+      throw new ValidationError("metadata.hardware must be an object");
+    }
+    const hw = meta.hardware;
+    const maxModel = Number(sub.max_hardware_model_chars ?? 96);
+    for (const strField of ["cpu_model", "gpu_model"]) {
+      const v = hw[strField];
+      if (v !== undefined && v !== null) {
+        if (typeof v !== "string" || v.length > maxModel) {
+          throw new ValidationError(`metadata.hardware.${strField} must be a string <= ${maxModel} chars`);
+        }
+      }
+    }
+    const intBounds = [
+      ["cpu_cores", 1, 1_000_000],
+      ["gpu_count", 0, 100_000],
+      ["node_count", 1, 100_000],
+    ];
+    for (const [field, lo, hi] of intBounds) {
+      const v = hw[field];
+      if (v !== undefined && v !== null) {
+        if (!Number.isInteger(v) || v < lo || v > hi) {
+          throw new ValidationError(`metadata.hardware.${field} must be an integer in [${lo}, ${hi}]`);
+        }
+      }
+    }
+    if (hw.ram_gib !== undefined && hw.ram_gib !== null) {
+      if (typeof hw.ram_gib !== "number" || !Number.isFinite(hw.ram_gib) || hw.ram_gib <= 0 || hw.ram_gib > 10_000_000) {
+        throw new ValidationError("metadata.hardware.ram_gib must be a number in (0, 10000000]");
+      }
+    }
+  }
+
   return meta;
 }
 

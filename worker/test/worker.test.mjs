@@ -128,6 +128,13 @@ async function makeSignedRequest({
     display_name: "Test Solver Team",
     solver_name: "mf-int16",
     repo_url: "https://github.com/example/solver",
+    hardware: {
+      cpu_model: "AMD EPYC 7B13",
+      cpu_cores: 8,
+      ram_gib: 32,
+      gpu_count: 0,
+      node_count: 1,
+    },
     compute_description: "AMD EPYC 8-core, 32 GiB RAM",
     algorithm_description: "Multifrontal int16 LDLT + GMRES refinement",
     self_reported: { solve_wall_s: 42.1, peak_rss_mib: 5900 },
@@ -233,6 +240,17 @@ test("POST /submit rejects bad Ed25519 signature, bad PoW, non-scheduled round, 
   );
   assert.equal(badRows.status, 400);
   assert.match((await badRows.json()).error, /unsupported row count/i);
+
+  const badHw = await worker.fetch(
+    await makeSignedRequest({
+      startRound: VALID_START_ROUND,
+      nowUtc: NOW_UTC,
+      metaOverrides: { hardware: { cpu_cores: 0 } },
+    }),
+    env
+  );
+  assert.equal(badHw.status, 400);
+  assert.match((await badHw.json()).error, /hardware\.cpu_cores/i);
 });
 
 test("POST /submit enforces hard pending queue cap and storage budget kill-switch", async () => {
