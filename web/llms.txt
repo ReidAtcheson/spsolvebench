@@ -1,0 +1,91 @@
+# spsolvebench — Trustless Sparse Linear Solver Leaderboard
+
+> A public, cryptographically verified benchmark challenge for solving Ax = b with large sparse A.
+
+- Website: https://spsolvebench.com
+- API Base: https://api.spsolvebench.com
+- Leaderboard & Client CLI Repo: https://github.com/ReidAtcheson/spsolvebench
+- Reference C Prover/Verifier (`stencil`): https://github.com/ReidAtcheson/sparse-solver-challenge
+- Background Blog Post: https://www.reidatcheson.com/sparse%20linear%20algebra/linear%20algebra/benchmark/2026/11/24/spsolve-benchmark-challenge.html
+
+## How It Works
+
+1. Five times per UTC day (`00:00`, `04:48`, `09:36`, `14:24`, `19:12 UTC`), a `drand` Quicknet beacon releases unpredictable randomness that seeds a public symmetric-indefinite sparse matrix `A` and right-hand side `b`.
+2. Everyone solving the same `(start_round, rows)` receives the exact same system, unknown until release.
+3. Entrants solve `Ax = b` using any algorithm, language, or hardware, commit to `x` using Ristretto255 row commitments, and obtain a Sigstore Public Good RFC 3161 timestamp before their chosen `proof_round`.
+4. After `proof_round` arrives, entrants run `stencil prove-beacon` offline to generate a compact `O(sqrt(n))` proof (`STNPRF03`) certifying joint 2-norm backward error `<= 2^-53` (~1.11e-16) and runtime (`genTime - start_round_time`) without revealing `x`.
+5. Entrants sign the submission with an Ed25519 keypair (reusing the same private key groups submissions together) and upload `proof.bin` + optional compute/algorithm descriptions to `POST https://api.spsolvebench.com/submit`.
+6. A batch verifier runs 5x/day using unmodified C `stencil verify-beacon` and publishes verified results and replayable proofs.
+
+## Official Rules & Protocol Parameters
+
+- Matrix profile: `signed-three-band-backward80-v2` (symmetric-indefinite, `7n - 12` entries of `+1`/`-1`, diagonal + 3 bands centered at `1`, `n^(1/3)`, `n^(2/3)`; `b_i = +/-1/n`)
+- Allowed sizes (`rows`):
+  - `8388608` (`2^23`, ~8.39M rows, proof ~203 KiB)
+  - `67108864` (`2^26`, ~67.1M rows, proof ~532 KiB)
+- Accuracy target: `backward_2_upper <= 2^-53` (verified by `stencil verify-beacon` exit code `0`, `target=pass`)
+- Official `start_round` schedule:
+  - drand Quicknet chain: `52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971`
+  - `genesis_utc = 1692803367`, `period_s = 3`, `scheduled_utc(round) = 1692803367 + 3 * (round - 1)`
+  - Official rounds satisfy `round >= 34250000` and `scheduled_utc(round) % 17280 == 0` (every 5,760 rounds = 4h 48m)
+- `proof_round`: chosen by the entrant (`proof_round > start_round`); must be strictly after the Sigstore timestamp (`genTime + u < proof_round_time`)
+- Pinned TSA: Sigstore Public Good (`https://timestamp.sigstore.dev/api/v1/timestamp`), policy OID `1.3.6.1.4.1.57264.2`, root DER SHA-256 `2aca8fea5d3ce48b01cc77076293c280e6c23ffe44034757ee7833ca9f45d633`, `clock_error_ns >= 1000000000`
+
+## Identity, Signature & Anti-Abuse
+
+- Entrant label in `stencil beacon-register`: `ed25519:<64-lowercase-hex-pubkey>`
+  - Verified against `reg[80:112] == SHA256("stencil-entry-v1" || "ed25519:" || pubkey_hex)`
+- Submission signature (`sig`, 128 lowercase hex chars): Ed25519 signature over UTF-8 bytes:
+  `spsolve-leaderboard-submit-v1\n<sha256_hex(proof.bin)>\n<sha256_hex(metadata.json)>\n`
+- Anti-abuse Hashcash PoW (default 22 leading zero bits, check `GET /health` for live `pow_bits` and `pow_bucket_s`):
+  `SHA256("spsolve-submit-pow-v1\n" || proof_sha256 || "\n" || metadata_sha256 || "\n" || pubkey_hex || "\n" || pow_bucket || "\n" || pow_nonce)`
+  where `pow_bucket = floor(utc_seconds / 600)` (current or previous 10-minute UTC bucket)
+- Optional `metadata.json` fields (UTF-8 JSON, max 12 KiB):
+  - `pubkey` (required, 64 lowercase hex chars)
+  - `display_name` (<= 64 chars)
+  - `solver_name` (<= 64 chars)
+  - `repo_url` (`http(s)` URL, <= 256 chars)
+  - `compute_description` (unstructured hardware/environment writeup, <= 4 KiB)
+  - `algorithm_description` (unstructured solver/algorithm writeup, <= 4 KiB)
+  - `self_reported`: `{ "solve_wall_s": number, "peak_rss_mib": number }`
+
+## HTTP API Endpoints
+
+- `GET https://api.spsolvebench.com/health` — live protocol config, schedule params, PoW difficulty
+- `POST https://api.spsolvebench.com/submit` — `multipart/form-data` with fields `proof` (file), `metadata` (file/string), `sig`, `pow_bucket`, `pow_nonce`; returns `202 Accepted` with `{ "id": "<attempt_id>", "status": "pending", "status_url": "/status/<id>" }`
+- `GET https://api.spsolvebench.com/status/<attempt_id>` — returns `pending`, `verified` (full entry JSON), or `rejected` (with diagnostic reason)
+- `GET https://api.spsolvebench.com/data/public/index.json` — compact summary of all verified leaderboard entries
+- `GET https://api.spsolvebench.com/data/public/dataset.jsonl.gz` — full compressed dataset (all certified fields + writeups)
+- `GET https://api.spsolvebench.com/data/verified/<attempt_id>/entry.json` — full verified record for one entry
+- `GET https://api.spsolvebench.com/data/verified/<attempt_id>/proof.bin` — raw replayable `STNPRF03` transcript
+
+## CLI Quickstart (Using `client/spsolve_bench.py`)
+
+```bash
+# 0. Build stencil with blst (see https://github.com/ReidAtcheson/sparse-solver-challenge)
+# 1. Clone client repo (requires Python 3.10+ and `cryptography`)
+git clone https://github.com/ReidAtcheson/spsolvebench.git
+cd spsolvebench
+
+# 2. Generate a reusable Ed25519 keypair
+python3 client/spsolve_bench.py keygen --out my.key
+
+# 3. Inspect upcoming official 5/day UTC start rounds
+python3 client/spsolve_bench.py schedule --count 5
+
+# 4. Run your solver on the next official round, stamp with Sigstore, and prove
+python3 client/spsolve_bench.py run --key my.key \
+  --stencil-dir /path/to/sparse-solver-challenge \
+  --work-dir ./run1 --rows 8388608 --proof-window-s 3600 \
+  --solver-cmd ./my_solver
+
+# 5. Sign, solve Hashcash PoW, and submit
+python3 client/spsolve_bench.py submit --key my.key \
+  --proof ./run1/public/proof.bin \
+  --display-name "My Team" --solver-name "my-solver-v1" \
+  --compute-description "8-core Zen 3, 32 GiB RAM" \
+  --algorithm-description "Multifrontal LDLT + GMRES iterative refinement"
+
+# 6. Check verification status (batches run 5x/day at 00:00, 05:00, 10:00, 15:00, 20:00 UTC)
+python3 client/spsolve_bench.py status --id <attempt_id>
+```

@@ -158,6 +158,102 @@ code, pre, .mono { font-family: var(--mono); }
   font-size: 0.9rem;
 }
 
+/* Overview & progressive disclosure */
+.overview-card {
+  background: linear-gradient(180deg, rgba(22, 30, 46, 0.92), rgba(18, 24, 38, 0.95));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px 16px;
+  margin-bottom: 18px;
+}
+
+.overview-lead {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.overview-copy {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  max-width: 96ch;
+}
+
+.overview-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 0.84rem;
+  margin-bottom: 14px;
+}
+
+.deep-dives {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.deep-dives details {
+  background: #0e1421;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+
+.deep-dives details[open] {
+  grid-column: 1 / -1;
+  border-color: var(--accent);
+}
+
+.deep-dives summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.deep-dives summary::-webkit-details-marker { display: none; }
+
+.deep-dives summary::before {
+  content: "▸";
+  color: var(--accent);
+  font-size: 0.8rem;
+  transition: transform 0.15s;
+}
+
+.deep-dives details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.deep-dives summary:hover {
+  color: var(--accent);
+}
+
+.dive-body {
+  padding: 2px 14px 14px;
+  border-top: 1px solid rgba(37, 49, 73, 0.65);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.dive-body p { margin: 10px 0 0; }
+.dive-body ol {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dive-body strong { color: var(--text); }
+
 .stats-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));

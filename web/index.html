@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>spsolvebench — Trustless Sparse Solver Leaderboard</title>
   <meta name="description" content="Public, cryptographically verified sparse linear solver leaderboard using drand Quicknet, Sigstore RFC 3161 timestamps, and succinct Ristretto255 sumcheck proofs.">
+  <link rel="alternate" type="text/plain" title="LLM and Agent Guide" href="/llms.txt">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -37,6 +38,75 @@
   <main class="container main-content">
     <!-- Status banner -->
     <div id="status-banner" class="banner hidden"></div>
+
+    <!-- Human- and agent-readable overview with progressive disclosure -->
+    <section class="overview-card" aria-label="About spsolvebench">
+      <div class="overview-top">
+        <p class="overview-lead">A public, trustless benchmark for solving <code>Ax = b</code> with large sparse <code>A</code>.</p>
+        <p class="overview-copy">
+          Five times each UTC day, a <code>drand</code> beacon seeds a fresh sparse linear system (2<sup>23</sup> or 2<sup>26</sup> rows) unknown until release, so every entrant on a round solves the exact same matrix on the same public clock (<code>drand</code> &rarr; Sigstore RFC&nbsp;3161). Submit a compact proof of your solution and runtime without revealing <code>x</code>; short hardware and algorithm writeups are encouraged.
+        </p>
+        <div class="overview-links">
+          <a href="https://www.reidatcheson.com/sparse%20linear%20algebra/linear%20algebra/benchmark/2026/11/24/spsolve-benchmark-challenge.html" target="_blank" rel="noopener noreferrer">Blog post &nearr;</a>
+          <a href="https://github.com/ReidAtcheson/sparse-solver-challenge" target="_blank" rel="noopener noreferrer">Reference C prover/verifier &nearr;</a>
+          <a href="https://github.com/ReidAtcheson/spsolvebench" target="_blank" rel="noopener noreferrer">Leaderboard &amp; CLI repo &nearr;</a>
+          <a href="/llms.txt" class="mono">llms.txt</a>
+        </div>
+      </div>
+
+      <div class="deep-dives">
+        <details name="overview-topic">
+          <summary>How a round works</summary>
+          <div class="dive-body">
+            <ol>
+              <li><strong>Wait for an official start round:</strong> 5 evenly spaced <code>drand</code> Quicknet rounds per day (<code>00:00</code>, <code>04:48</code>, <code>09:36</code>, <code>14:24</code>, <code>19:12 UTC</code>; every <code>5,760</code> rounds).</li>
+              <li><strong>Solve &amp; commit:</strong> Derive the matrix <code>A</code> and RHS <code>b</code> from the Quicknet signature, solve <code>Ax = b</code> using any algorithm or hardware, and compute Ristretto255 row commitments to <code>x</code>.</li>
+              <li><strong>Stop the clock:</strong> Stamp the commitment digest with Sigstore Public Good&rsquo;s RFC&nbsp;3161 TSA before your chosen <code>proof_round</code>. Elapsed time runs from scheduled <code>drand</code> release to the signed TSA timestamp.</li>
+              <li><strong>Prove offline &amp; submit:</strong> Once <code>proof_round</code> arrives, run <code>stencil prove-beacon</code> offline to build a compact <code>proof.bin</code>, sign your submission with an Ed25519 key, and POST to <code>https://api.spsolvebench.com/submit</code>.</li>
+            </ol>
+          </div>
+        </details>
+
+        <details name="overview-topic">
+          <summary>Matrix generator</summary>
+          <div class="dive-body">
+            <p>
+              The competition profile (<code>signed-three-band-backward80-v2</code>) draws a symmetric-indefinite sparse matrix of dimension <code>n &isin; {2<sup>23</sup> = 8,388,608,&nbsp;2<sup>26</sup> = 67,108,864}</code> with <code>7n &minus; 12</code> nonzeros: a signed diagonal plus three off-diagonal bands per row centered at offsets <code>1</code>, <code>n<sup>1/3</sup></code>, and <code>n<sup>2/3</sup></code> (bounded within &plusmn;200 columns of each center, with a 1% tail). Every nonzero entry of <code>A</code> is <code>+1</code> or <code>&minus;1</code>, and each RHS entry is <code>b<sub>i</sub> = &plusmn;1/n</code>.
+            </p>
+            <p>
+              Because the matrix is indefinite with <code>&plusmn;1</code> entries, direct elimination encounters frequent exact <code>1 &minus; 1 = 0</code> cancellations, requiring pivoting or shifting plus iterative refinement to reach machine-precision backward error.
+              <a href="https://github.com/ReidAtcheson/sparse-solver-challenge/blob/main/THREE_BAND.md" target="_blank" rel="noopener noreferrer">Generator spec (THREE_BAND.md) &nearr;</a>
+            </p>
+          </div>
+        </details>
+
+        <details name="overview-topic">
+          <summary>Commitment &amp; residual proof</summary>
+          <div class="dive-body">
+            <p>
+              The prover quantizes <code>x</code> into a shared-exponent integer vector arranged as a rectangle and commits to each row with unblinded Ristretto255 vector commitments (Hyrax-style). After <code>proof_round</code> supplies fresh randomness, Fiat&ndash;Shamir drives two degree-2 sumchecks plus 128 ChaCha20 subset-sum range checks that tie the squared residual norm, squared solution norm, and a single folded row opening together.
+            </p>
+            <p>
+              Proof size grows as <code>O(&radic;n)</code> (~203&nbsp;KiB at 2<sup>23</sup>, ~532&nbsp;KiB at 2<sup>26</sup>), verifier RAM stays flat at ~8&ndash;10&nbsp;MiB, and passing certifies a joint 2-norm backward-error upper bound of at most <code>2<sup>&minus;53</sup></code> (~1.11&times;10<sup>&minus;16</sup>) checked in exact integers&mdash;without ever transmitting <code>x</code>.
+              <a href="https://github.com/ReidAtcheson/sparse-solver-challenge/blob/main/VALIDATOR.md" target="_blank" rel="noopener noreferrer">Validator spec &nearr;</a> &middot;
+              <a href="https://github.com/ReidAtcheson/sparse-solver-challenge/blob/main/THREE_BAND_PROOF.md" target="_blank" rel="noopener noreferrer">Integer bounds &nearr;</a>
+            </p>
+          </div>
+        </details>
+
+        <details name="overview-topic">
+          <summary>Clock, identity &amp; verification</summary>
+          <div class="dive-body">
+            <p>
+              No accounts or preregistration are required. Generate an Ed25519 keypair and pass <code>ed25519:&lt;pubkey&gt;</code> as the entrant label to <code>stencil beacon-register</code>; reusing the same private key groups all your runs together on the leaderboard while preventing proof theft.
+            </p>
+            <p>
+              Submissions include a lightweight Hashcash PoW (~1&ndash;3&nbsp;s) to prevent queue spam and are verified in scheduled batches 5&times;/day using the unmodified C <code>stencil verify-beacon</code> binary against pinned Sigstore Public Good trust roots. Every verified <code>proof.bin</code> and dataset export is downloadable for independent offline replay.
+            </p>
+          </div>
+        </details>
+      </div>
+    </section>
 
     <!-- Summary stat strip -->
     <section class="stats-strip" id="stats-strip">
@@ -236,7 +306,7 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <span>Powered by <a href="https://github.com/ReidAtcheson/sparse-solver-challenge" target="_blank" rel="noopener noreferrer">sparse-solver-challenge</a> · Verification runs in batches 5&times;/day</span>
+      <span>Powered by <a href="https://github.com/ReidAtcheson/sparse-solver-challenge" target="_blank" rel="noopener noreferrer">sparse-solver-challenge</a> · <a href="/llms.txt">llms.txt</a> · Verification runs in batches 5&times;/day</span>
       <span class="mono small" id="footer-utc"></span>
     </div>
   </footer>
